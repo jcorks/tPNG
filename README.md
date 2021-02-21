@@ -4,12 +4,10 @@ PNG reader in a single, portable C file and header that dumps to raw RGBA pixels
 
 Current status
 --------------
-Still under construction! 2 Major tasks left: 
-* Background support is missing.
+Still under construction! Major tasks left: 
 * Interlacing support is missing.
 
-Current tests seem to indicate that its fit for usage outside of these 
-2 features. 
+Current tests seem to indicate that its fit for usage outside of this missing feature.
 
 
 What is it?
