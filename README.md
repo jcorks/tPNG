@@ -5,11 +5,11 @@ PNG reader in a single, portable C file and header that dumps to raw RGBA pixels
 Current status
 --------------
 Still under construction! 2 Major tasks left: 
-* There needs to be more tests for filters.
+* Background support is missing.
 * Interlacing support is missing.
 
-tPNG in its current for is still usable for basic cases, but there may still 
-be issues.
+Current tests seem to indicate that its fit for usage outside of these 
+2 features. 
 
 
 What is it?
