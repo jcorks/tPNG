@@ -827,10 +827,10 @@ static void tpng_process_chunk(tpng_image_t * image, tpng_chunk_t * chunk) {
 
               case 3: //average
                 for(i = 0; i < Bpp; ++i) {
-                    thisRow[0] = thisRow[0] + (int)((0 + prevRow[i])/2);
+                    thisRow[i] = thisRow[i] + (int)((0 + prevRow[i])/2.0);
                 }
                 for(i = Bpp; i < rowBytes; ++i) {
-                    thisRow[i] = thisRow[i] + (int)((thisRow[i-Bpp] + prevRow[i])/2);
+                    thisRow[i] = thisRow[i] + (int)((thisRow[i-Bpp] + prevRow[i])/2.0);
                 }
                 break;   
 

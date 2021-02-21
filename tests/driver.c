@@ -209,6 +209,12 @@ int main() {
     verify_test("gray-16-sRGB.png");
     verify_test("gray-16-sRGB-tRNS.png");
     verify_test("gray-16-tRNS.png");
+    verify_test("gray-filter0.png");
+    verify_test("gray-filter1.png");
+    verify_test("gray-filter2.png");
+    verify_test("gray-filter3.png");
+    verify_test("gray-filter4.png");
+    verify_test("gray-filtern.png");
 
     verify_test("palette-1-1.8.png");
     verify_test("palette-1-1.8-tRNS.png");
@@ -257,16 +263,19 @@ int main() {
     verify_test("rgb-8-sRGB.png");
     verify_test("rgb-8-sRGB-tRNS.png");
     verify_test("rgb-8-tRNS.png");
-
     verify_test("rgb-alpha-16-1.8.png");
     verify_test("rgb-alpha-16-linear.png");
     verify_test("rgb-alpha-16.png");
     verify_test("rgb-alpha-16-sRGB.png");
-
     verify_test("rgb-alpha-8-1.8.png");
     verify_test("rgb-alpha-8-linear.png");
     verify_test("rgb-alpha-8.png");
     verify_test("rgb-alpha-8-sRGB.png");
+    verify_test("rgb-filter0.png");
+    verify_test("rgb-filter1.png");
+    verify_test("rgb-filter2.png");
+    verify_test("rgb-filter3.png");
+    verify_test("rgb-filter4.png");
 
 
 
@@ -295,6 +304,8 @@ int main() {
     integrity_check("crashers/huge_tIME_chunk.png");
     integrity_check("crashers/huge_zTXt_chunk.png");
 
+    verify_test("average-a.png");
+    verify_test("average-b.png");
     
     printf("The test is complete.\n");
     return 0;

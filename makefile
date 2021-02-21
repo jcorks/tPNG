@@ -8,5 +8,8 @@
 all:
 	$(CC) tpng.c -Wall -O2 tests/driver.c -o ./tests/tpng_test
 
+debug:
+	$(CC) tpng.c -Wall -g -fsanitize=address -fsanitize=undefined -o ./tests/tpng_test
+
 clean:
 	rm ./tests/tpng_test

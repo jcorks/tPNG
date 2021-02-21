@@ -1,4 +1,6 @@
 Import of test PNGs from libpng to test tPNG's reading abilities.
+Most of these tests from libpng come from http://www.schaik.com/pngsuite/
+Some of them are personal image tests from typical sources.
 
 
 
