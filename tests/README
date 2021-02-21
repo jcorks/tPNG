@@ -1,0 +1,29 @@
+Import of test PNGs from libpng to test tPNG's reading abilities.
+
+
+
+
+Here, each PNG file in this directory has an RGBA data equivalent within the 
+"rawdata" directory that matches. The test (driver.c) will open 
+every PNG and compare the raw RGBA values against the raw data 
+equivalent.
+
+If A test fails, the program will print "TEST FAILED" with more information 
+to stdout and will exit. If all tests pass, the program returns 
+"The test is complete.\n".
+
+Every major commit should be checked with these tests, and 
+further tests should be added using the existing patterns here.
+
+
+
+
+To run the tests:
+
+ -  Run make in this directory.
+ -  Run the resultant test.exe
+
+
+Alternatively, driver.c and tpng.c compiled together 
+with your compiler will be sufficient to produce the 
+text program in the case that GCC and GNUmake isn't available.

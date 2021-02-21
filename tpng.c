@@ -94,7 +94,14 @@ tpng_iter_t * tpng_iter_create(const uint8_t * data, uint32_t size);
 // Frees data associated with tPNG.
 void tpng_iter_destroy(tpng_iter_t *);
 
-// Returns a read-only buffer of
+// Returns a read-only buffer of the requested size.
+// If the request would make the iterator read out-of-bounds,
+// a new, emtpy buffer is returned of that size.
+const void * tpng_iter_advance_guaranteed(tpng_iter_t *, uint32_t);
+
+// Returns a read-only buffer of the requested size.
+// If the request would make the iterator read out-of-bounds,
+// NULL is returned.
 const void * tpng_iter_advance(tpng_iter_t *, uint32_t);
 
 
@@ -106,9 +113,11 @@ const void * tpng_iter_advance(tpng_iter_t *, uint32_t);
 #define TPNG_BEGIN(__iter__)const void*next_;tpng_iter_t * iter_=__iter__
 
 // Reads the data type from the iterator.
-#define TPNG_READ(__type__)*(__type__*)((next_=tpng_iter_advance(iter_, sizeof(__type__))))
+#define TPNG_READ(__type__)*(__type__*)((next_=tpng_iter_advance_guaranteed(iter_, sizeof(__type__))))
 
 // Reads n bytes from the iterator.
+// Needs to be checked for NULL, so call for large amounts 
+// of bytes only when needed.
 #define TPNG_READ_N(__len__)tpng_iter_advance(iter_, __len__)
 
 
@@ -147,6 +156,9 @@ typedef struct {
 
     // Blue component. 0 - 255.
     uint8_t b;
+
+    // Alpha component, modified by the tRNS chunk.
+    uint8_t a;
 } tpng_palette_entry_t;
 
 
@@ -177,7 +189,16 @@ typedef struct {
 
     // Interlacing.
     int interlaceMethod;
+
+    // the transparent gray color.
+    // -1 if not used.
+    int transparentGray;
     
+    // "truecolor" transparency.
+    int transparentRed;
+    int transparentGreen;
+    int transparentBlue;
+
 
     // The palette specified by PLTE chunk.
     tpng_palette_entry_t palette[TPNG_PALETTE_LIMIT];
@@ -302,22 +323,40 @@ uint8_t * tpng_get_rgba(
 
 
 
-static int tpng_correct_byte_order(tpng_image_t * img, int i) {
+static int32_t tpng_read_integer(tpng_image_t * img, tpng_iter_t * iter) {
+    const uint8_t * src = tpng_iter_advance(iter, sizeof(int32_t));
+    if (!src) return 0;
+    int i;
+    char * data = (char*)&i;
     if (img->littleEndian) {
-        char * data = (char*)&i;
-        char t;
-        t = data[0]; data[0] = data[3]; data[3] = t;
-        t = data[1]; data[1] = data[2]; data[2] = t;
+        data[0] = src[3];
+        data[1] = src[2];
+        data[2] = src[1];
+        data[3] = src[0];                
+    } else {
+        data[0] = src[0];
+        data[1] = src[1];
+        data[2] = src[2];
+        data[3] = src[3];                
     }
     return i;
 }
 
-static uint32_t tpng_correct_byte_order_unsigned(tpng_image_t * img, uint32_t i) {
+static uint32_t tpng_read_uinteger(tpng_image_t * img, tpng_iter_t * iter) {
+    const uint8_t * src = tpng_iter_advance(iter, sizeof(int32_t));
+    if (!src) return 0;
+    uint32_t i;
+    char * data = (char*)&i;
     if (img->littleEndian) {
-        char * data = (char*)&i;
-        char t;
-        t = data[0]; data[0] = data[3]; data[3] = t;
-        t = data[1]; data[1] = data[2]; data[2] = t;
+        data[0] = src[3];
+        data[1] = src[2];
+        data[2] = src[1];
+        data[3] = src[0];                
+    } else {
+        data[0] = src[0];
+        data[1] = src[1];
+        data[2] = src[2];
+        data[3] = src[3];                
     }
     return i;
 }
@@ -327,14 +366,18 @@ static uint32_t tpng_correct_byte_order_unsigned(tpng_image_t * img, uint32_t i)
 static void tpng_read_chunk(tpng_image_t * image, tpng_iter_t * iter, tpng_chunk_t * chunk) {
     TPNG_BEGIN(iter);
     memset(chunk, 0, sizeof(tpng_chunk_t));
-    chunk->length = tpng_correct_byte_order_unsigned(image, TPNG_READ(uint32_t));
+    chunk->length = tpng_read_uinteger(image, iter);
     chunk->type[0] = TPNG_READ(char);
     chunk->type[1] = TPNG_READ(char);
     chunk->type[2] = TPNG_READ(char);
     chunk->type[3] = TPNG_READ(char);
     chunk->type[4] = 0;
     chunk->data = TPNG_READ_N(chunk->length);
-    chunk->crc  = tpng_correct_byte_order(image, TPNG_READ(int)); // crc 
+    // chunkLength was lying! could not read as much as it said...
+    if (!chunk->data) {
+        chunk->length = 0;
+    }
+    chunk->crc  = tpng_read_integer(image, iter); // crc 
     
     if (chunk->type[0] == 0 &&
         chunk->type[1] == 0 &&
@@ -353,6 +396,14 @@ static void tpng_image_init(tpng_image_t * image, uint32_t rawlen) {
     image->idataLength = 0;
     image->idata = TPNG_MALLOC(rawlen); // idata is NEVER longer than the raw files size.
     image->rgba = 0;
+    image->colorType = -1;
+    image->colorDepth = 0;
+    image->transparentGray = -1;
+    image->transparentRed = -1;
+    int i;
+    for(i = 0; i < TPNG_PALETTE_LIMIT; ++i) {
+        image->palette[i].a = 255;
+    }
     #if (TPNG_ENDIANNESS == -1)
         image->littleEndian = 1;
         image->littleEndian = *((char*)(&image->littleEndian));
@@ -365,60 +416,82 @@ static void tpng_image_init(tpng_image_t * image, uint32_t rawlen) {
 
 
 static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t * expanded) {
-    uint32_t i;
+    uint32_t i, n;
     uint32_t bitCount = image->colorDepth*image->w;
     int iter;
     int palette;
+    int rawVal, rawG, rawB;
     switch(image->colorType) {
       // grayscale!
       case 0:
         switch(image->colorDepth) {
           case 1:
-            for(i = 0; i < bitCount; ++i) {
-                iter = (i/8)*4;
-                expanded[iter] = row[i/8]  & 1 << i%8; 
-                expanded[iter+1] = expanded[iter];
-                expanded[iter+2] = expanded[iter];
-                expanded[iter+3] = 255;
+            for(i = 0; i < bitCount; ++i, expanded+=4) {
+                // raw val is: the i'thbit, starting from MSB
+                rawVal = ((row[i/8] >> (7 - i%8)) & 1);
+                *expanded   = rawVal * 255; 
+                expanded[1] = *expanded;
+                expanded[2] = *expanded;
+                expanded[3] = 255;
+                if (image->transparentGray == rawVal) {
+                    expanded[3] = 0;
+                }
             }
             break;
           case 2:
-            for(i = 0; i < bitCount; i+=2) {
-                iter = (i/4)*4;
-                expanded[iter] = row[i/4] & 3 << (i%4); 
-                expanded[iter+1] = expanded[iter];
-                expanded[iter+2] = expanded[iter];
-                expanded[iter+3] = 255;
+            for(i = 0; i < bitCount; i+=2, expanded+=4) {
+                // raw val is: the i'th 2bits, starting from MSB
+                rawVal = ((row[i/8] >> (6 - i%8)) & 3);
+                *expanded = (rawVal/3.0) * 255; 
+                expanded[1] = *expanded;
+                expanded[2] = *expanded;
+                expanded[3] = 255;
+                if (image->transparentGray == rawVal) {
+                    expanded[3] = 0;
+                }
             }
             break;
           case 4:
-            for(i = 0; i < bitCount; i+=4) {
-                iter = (i/2)*4;
-                expanded[(i/2)*4] = row[i/2] & 15 << i; 
-                expanded[iter+1] = expanded[iter];
-                expanded[iter+2] = expanded[iter];
-                expanded[iter+3] = 255;
+            for(i = 0; i < bitCount; i+=4, expanded+=4) {
+                // raw val is: the i'th 4bits, starting from MSB
+                rawVal = ((row[i/8] >> (4-i%8)) & 15);
+                *expanded   = (rawVal/15.0) * 255; 
+                expanded[1] = *expanded;
+                expanded[2] = *expanded;
+                expanded[3] = 255;
+                if (image->transparentGray == rawVal) {
+                    expanded[3] = 0;
+                }
             }
             break;
           case 8:
-            for(i = 0; i < bitCount; i+=8) {
-                expanded[i*4] = row[i]; 
-                expanded[iter+1] = expanded[iter];
-                expanded[iter+2] = expanded[iter];
-                expanded[iter+3] = 255;
-            }
-            break;
-          case 16:
-            for(i = 0; i < bitCount; i+=16) {
-                expanded[i*4]   = (row[i*2]+row[i*2+1])/2; 
-                expanded[iter+1] = expanded[iter];
-                expanded[iter+2] = expanded[iter];
-                expanded[iter+3] = 255;
+            for(i = 0; i < bitCount; i+=8, expanded+=4) {
+                *expanded =   row[i/8]; 
+                expanded[1] = *expanded;
+                expanded[2] = *expanded;
+                expanded[3] = 255;
+                if (image->transparentGray == *expanded) {
+                    expanded[3] = 0;
+                }
 
             }
             break;
+          case 16:
+            for(i = 0; i < bitCount; i+=16, expanded+=4) {
+                rawVal = (0xff*row[i/8]+row[i/8+1]);
+                *expanded = row[i/8]; 
+                expanded[1] = *expanded;
+                expanded[2] = *expanded;
+                expanded[3] = 255;
+                if (image->transparentGray == rawVal) {
+                    expanded[3] = 0;
+                }                
+            }
+            break;
+
+          
           default:;
-        }       
+        }     
         break;
 
 
@@ -427,21 +500,37 @@ static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t *
         
        // plain RGB!
        case 2:
+        iter = 0;
         switch(image->colorDepth) {
           case 8:
-            for(i = 0; i < image->w; ++i) {
-                expanded[i*4  ] = row[i*3  ]; 
-                expanded[i*4+1] = row[i*3+1]; 
-                expanded[i*4+2] = row[i*3+2]; 
-                expanded[i*4+3] = 255;
+            for(i = 0; i < image->w; ++i, iter+=4) {
+                expanded[iter]   = row[i*3  ]; 
+                expanded[iter+1] = row[i*3+1]; 
+                expanded[iter+2] = row[i*3+2]; 
+                expanded[iter+3] = 255;
+                if (image->transparentRed   == expanded[iter] &&
+                    image->transparentGreen == expanded[iter+1] &&
+                    image->transparentBlue  == expanded[iter+2]) {
+                    expanded[iter+3] = 0;
+                }
             }
             break;
           case 16:
-            for(i = 0; i < image->w; ++i) {
-                expanded[i*4  ] = (row[i*6  ] + row[i*6+1]) / 2; 
-                expanded[i*4+1] = (row[i*6+2] + row[i*6+3]) / 2; 
-                expanded[i*4+2] = (row[i*6+4] + row[i*6+5]) / 2; 
-                expanded[i*4+3] = 255;
+            for(i = 0; i < image->w; ++i, iter+=4) {
+                rawVal = row[i*6]  *0xff + row[i*6+1];
+                rawG =   row[i*6+2]*0xff + row[i*6+3];
+                rawB =   row[i*6+4]*0xff + row[i*6+5];
+
+                expanded[iter]   = row[i*6]; 
+                expanded[iter+1] = row[i*6+2]; 
+                expanded[iter+2] = row[i*6+4]; 
+                expanded[iter+3] = 255;
+                if (image->transparentRed   == rawVal &&
+                    image->transparentGreen == rawG &&
+                    image->transparentBlue  == rawB) {
+                    expanded[iter+3] = 0;
+                }
+
             }
             break;
           default:;  
@@ -450,45 +539,42 @@ static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t *
             
       // palette!
       case 3:
+        iter = 0;
         switch(image->colorDepth) {
           case 1:
-            for(i = 0; i < bitCount; ++i) {
-                iter = (i/8)*4;
-                palette = row[i/8]  & 1 << i%8;
+            for(i = 0; i < bitCount; ++i, iter+=4) {
+                palette = ((row[i/8] >> (7 - i%8)) & 1);
                 expanded[iter]   = image->palette[palette].r; 
                 expanded[iter+1] = image->palette[palette].g; 
                 expanded[iter+2] = image->palette[palette].b; 
-                expanded[iter+3] = 255;
+                expanded[iter+3] = image->palette[palette].a;
             }
             break;
           case 2:
-            for(i = 0; i < bitCount; i+=2) {
-                iter = (i/4)*4;
-                palette = row[i/4] & 3 << i%4;
+            for(i = 0; i < bitCount; i+=2, iter+=4) {
+                palette = ((row[i/8] >> (6 - i%8)) & 3);
                 expanded[iter]   = image->palette[palette].r; 
                 expanded[iter+1] = image->palette[palette].g; 
                 expanded[iter+2] = image->palette[palette].b; 
-                expanded[iter+3] = 255;
+                expanded[iter+3] = image->palette[palette].a;
             }
             break;
           case 4:
-            for(i = 0; i < bitCount; i+=4) {
-                iter = (i/2)*4;
-                palette = row[i/2] & 15 << i; 
+            for(i = 0; i < bitCount; i+=4, iter+=4) {
+                palette = ((row[i/8] >> (4-i%8)) & 15);
                 expanded[iter]   = image->palette[palette].r; 
                 expanded[iter+1] = image->palette[palette].g; 
                 expanded[iter+2] = image->palette[palette].b; 
-                expanded[iter+3] = 255;
+                expanded[iter+3] = image->palette[palette].a;
             }
             break;
           case 8:
-            for(i = 0; i < bitCount; i+=8) {
-                iter = i;
-                palette = row[i];
+            for(i = 0; i < bitCount; i+=8, iter+=4) {
+                palette = row[i/8];
                 expanded[iter]   = image->palette[palette].r; 
                 expanded[iter+1] = image->palette[palette].g; 
                 expanded[iter+2] = image->palette[palette].b; 
-                expanded[iter+3] = 255;
+                expanded[iter+3] = image->palette[palette].a;
             }
             break;
           default:;
@@ -535,10 +621,10 @@ static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t *
             break;
           case 16:
             for(i = 0; i < image->w; ++i) {
-                expanded[i*4  ] = (row[i*8  ] + row[i*8+1]) / 2; 
-                expanded[i*4+1] = (row[i*8+2] + row[i*8+3]) / 2; 
-                expanded[i*4+2] = (row[i*8+4] + row[i*8+5]) / 2; 
-                expanded[i*4+3] = (row[i*8+6] + row[i*8+7]) / 2; 
+                expanded[i*4  ] = row[i*8]  ; 
+                expanded[i*4+1] = row[i*8+2]; 
+                expanded[i*4+2] = row[i*8+4]; 
+                expanded[i*4+3] = row[i*8+6]; 
             }
             break;
           default:;  
@@ -566,6 +652,30 @@ static int tpng_get_bytes_per_pixel(tpng_image_t * image) {
 
     return bpp < 8 ? 1 : bpp/8;
 }   
+
+static int tpng_get_bytes_per_row(tpng_image_t * image) {
+    int bpp = image->colorDepth;
+
+    // R G B per pixel
+    if (image->colorType == 2||
+        image->colorType == 6) {
+        bpp *= 3;
+    }
+
+    // alpha channel
+    if (image->colorType & 4) {
+        bpp += image->colorDepth;
+    }
+
+    bpp *= image->w;
+
+    if (bpp < 8) return 1;
+    if (bpp % 8) {
+        return bpp/8 + 1;
+    } else {
+        return bpp/8;
+    }
+}
 
 
 static int tpng_paeth_predictor(int a, int b, int c) {
@@ -595,8 +705,8 @@ static void tpng_process_chunk(tpng_image_t * image, tpng_chunk_t * chunk) {
     if (!strcmp(chunk->type, "IHDR")) {
         tpng_iter_t * iter = tpng_iter_create(chunk->data, chunk->length);
         TPNG_BEGIN(iter);
-        image->w = tpng_correct_byte_order(image, TPNG_READ(int));
-        image->h = tpng_correct_byte_order(image, TPNG_READ(int));
+        image->w = tpng_read_integer(image, iter);
+        image->h = tpng_read_integer(image, iter);
         
         image->colorDepth      = TPNG_READ(char);
         image->colorType       = TPNG_READ(char);
@@ -614,7 +724,7 @@ static void tpng_process_chunk(tpng_image_t * image, tpng_chunk_t * chunk) {
         tpng_iter_t * iter = tpng_iter_create(chunk->data, chunk->length);
         TPNG_BEGIN(iter);
         
-        image->nPalette = chunk->length / sizeof(tpng_palette_entry_t);
+        image->nPalette = chunk->length / 3;
         if (image->nPalette > TPNG_PALETTE_LIMIT) image->nPalette = TPNG_PALETTE_LIMIT;
         uint32_t i;
         for(i = 0; i < image->nPalette; ++i) {
@@ -629,6 +739,32 @@ static void tpng_process_chunk(tpng_image_t * image, tpng_chunk_t * chunk) {
     } else if (!strcmp(chunk->type, "IDAT")) {
         memcpy(image->idata+image->idataLength, chunk->data, chunk->length);         
         image->idataLength += chunk->length;
+
+    // Simple transparency!
+    } else if (!strcmp(chunk->type, "tRNS")) {
+        tpng_iter_t * iter = tpng_iter_create(chunk->data, chunk->length);
+        TPNG_BEGIN(iter);
+
+        // palette transparency
+        if (image->colorType == 3) {
+            uint32_t i;
+            for(i = 0; i < chunk->length && i < TPNG_PALETTE_LIMIT; ++i) {
+                image->palette[i].a = TPNG_READ(uint8_t);
+            }
+
+        // grayscale
+        } else if (image->colorType == 0) {
+            // network byte order!
+            image->transparentGray = TPNG_READ(uint8_t)*0xff + TPNG_READ(uint8_t);
+
+        // 
+        } else if (image->colorType == 2) {
+            image->transparentRed   = TPNG_READ(uint8_t)*0xff + TPNG_READ(uint8_t);
+            image->transparentGreen = TPNG_READ(uint8_t)*0xff + TPNG_READ(uint8_t);
+            image->transparentBlue  = TPNG_READ(uint8_t)*0xff + TPNG_READ(uint8_t);            
+        }
+        tpng_iter_destroy(iter);        
+
     } else if (!strcmp(chunk->type, "IEND")) {
         // compression mode is the current and only accepted type.
         if (image->compression != 0) return;
@@ -655,7 +791,7 @@ static void tpng_process_chunk(tpng_image_t * image, tpng_chunk_t * chunk) {
         // each scanline contains a single byte specifying how its filtered (reordered)
         uint32_t row = 0;
         int Bpp = tpng_get_bytes_per_pixel(image);
-        uint32_t rowBytes = (Bpp * image->w);
+        uint32_t rowBytes = tpng_get_bytes_per_row(image);
 
         // row bytes of the above row, filter byte discarded
         // Before initialized, is 0.
@@ -670,7 +806,10 @@ static void tpng_process_chunk(tpng_image_t * image, tpng_chunk_t * chunk) {
         int i;
         for(row = 0; row < image->h; ++row) {
             int filter = TPNG_READ(uint8_t);
-            memcpy(thisRow, TPNG_READ_N(rowBytes), rowBytes);
+            const void * readN = TPNG_READ_N(rowBytes);
+            // abort read of IDAT
+            if (!readN) break;
+            memcpy(thisRow, readN, rowBytes);
     
             switch(filter) {
               case 0: // no filtering 
@@ -780,8 +919,13 @@ void tpng_iter_destroy(tpng_iter_t * t) {
     for(i = 0; i < t->nerrors; ++i) {
         TPNG_FREE(t->errors[i]);
     }
+    TPNG_FREE(t->errors);
     TPNG_FREE(t);
 }
+
+#ifdef TPNG_REPORT_ERROR
+    #include <stdio.h>
+#endif
 
 const void * tpng_iter_advance(tpng_iter_t * t, uint32_t size) {
     if (!size) return NULL;
@@ -789,19 +933,34 @@ const void * tpng_iter_advance(tpng_iter_t * t, uint32_t size) {
         const void * out = t->data+t->iter;     
         t->iter+=size;   
         return out;
-    } else {
+    } 
+    return NULL;
+}
+
+const void * tpng_iter_advance_guaranteed(tpng_iter_t * t, uint32_t size) {
+    const void * data = tpng_iter_advance(t, size);
+    if (!data) {
         // no partial requests. 
         // An entire empty buffer is returned for bad requests.
+        #ifdef TPNG_REPORT_ERROR
+            printf("tPNG: WARNING: Request denied to read %d bytes, which is %d bytes past %p\n", size, (size + t->iter) - t->size, t->data); 
+        #endif
         void * newError = TPNG_CALLOC(1, size);
+        void * newErrorArray = TPNG_MALLOC(sizeof(void*)*(t->nerrors+1));
         if (t->nerrors) {
-            void * newErrorArray = TPNG_MALLOC(sizeof(void*)*(t->nerrors+1));
             memcpy(newErrorArray, t->errors, sizeof(void*)*t->nerrors);
+            free(t->errors);
         }
+        t->errors = newErrorArray;
         t->errors[t->nerrors] = newError;
         t->nerrors++;
         return newError;
+    } else {
+        return data;
     }
 }
+
+
 ///////////////
 
 
