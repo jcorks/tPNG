@@ -306,6 +306,7 @@ int main() {
 
     verify_test("average-a.png");
     verify_test("average-b.png");
+    verify_test("important.png");
     
     printf("The test is complete.\n");
     return 0;
