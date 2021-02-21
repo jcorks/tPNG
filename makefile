@@ -6,7 +6,7 @@
 # just add the c and h file to your project add compile it.
 
 all:
-	$(CC) tpng.c -g -O2 tests/driver.c -o ./tests/tpng_test
+	$(CC) tpng.c -Wall -O2 tests/driver.c -o ./tests/tpng_test
 
 clean:
 	rm ./tests/tpng_test

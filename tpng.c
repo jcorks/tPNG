@@ -110,15 +110,15 @@ const void * tpng_iter_advance(tpng_iter_t *, uint32_t);
 
 // Helper macro setup. Takes in the iterator to set up.
 // Can only be called once per scope.
-#define TPNG_BEGIN(__iter__)const void*next_;tpng_iter_t * iter_=__iter__
+#define TPNG_BEGIN(__iter__)tpng_iter_t * TPNGITER=__iter__
 
 // Reads the data type from the iterator.
-#define TPNG_READ(__type__)*(__type__*)((next_=tpng_iter_advance_guaranteed(iter_, sizeof(__type__))))
+#define TPNG_READ(__type__)*(__type__*)((tpng_iter_advance_guaranteed(TPNGITER, sizeof(__type__))))
 
 // Reads n bytes from the iterator.
 // Needs to be checked for NULL, so call for large amounts 
 // of bytes only when needed.
-#define TPNG_READ_N(__len__)tpng_iter_advance(iter_, __len__)
+#define TPNG_READ_N(__len__)tpng_iter_advance(TPNGITER, __len__)
 
 
 
@@ -416,7 +416,7 @@ static void tpng_image_init(tpng_image_t * image, uint32_t rawlen) {
 
 
 static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t * expanded) {
-    uint32_t i, n;
+    uint32_t i;
     uint32_t bitCount = image->colorDepth*image->w;
     int iter;
     int palette;
@@ -912,6 +912,7 @@ tpng_iter_t * tpng_iter_create(const uint8_t * data, uint32_t size) {
     
     out->nerrors = 0;
     out->errors = NULL;
+    return out;
 }
 
 void tpng_iter_destroy(tpng_iter_t * t) { 
@@ -1021,13 +1022,6 @@ enum
 struct tinfl_decompressor_tag;
 typedef struct tinfl_decompressor_tag tinfl_decompressor;
 
-
-
-/* Allocate the tinfl_decompressor structure in C so that */
-/* non-C language bindings to tinfl_ API don't need to worry about */
-/* structure size and allocation mechanism. */
-static tinfl_decompressor *tinfl_decompressor_alloc(void);
-static void tinfl_decompressor_TPNG_FREE(tinfl_decompressor *pDecomp);
 
 
 
@@ -1804,18 +1798,6 @@ void *tinfl_decompress_mem_to_heap(const void *pSrc_buf, size_t src_buf_len, siz
 
 
 
-tinfl_decompressor *tinfl_decompressor_alloc()
-{
-    tinfl_decompressor *pDecomp = (tinfl_decompressor *)TPNG_MALLOC(sizeof(tinfl_decompressor));
-    if (pDecomp)
-        tinfl_init(pDecomp);
-    return pDecomp;
-}
-
-void tinfl_decompressor_TPNG_FREE(tinfl_decompressor *pDecomp)
-{
-    TPNG_FREE(pDecomp);
-}
 
 #ifdef __cplusplus
 }

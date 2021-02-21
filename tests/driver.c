@@ -74,7 +74,6 @@ static uint8_t * dump_file_data(const char * filename, uint32_t * size) {
         throw_error(TPNG_ERROR__CANNOT_OPEN_FILE);
     }
 
-    int chunkSize = CHUNK_SIZE;
     char chunk[CHUNK_SIZE];
     *size = 0;
     uint32_t readAmt = 0;
@@ -171,6 +170,7 @@ static int verify_test(const char * filenamePNG) {
     free(keydata);
     free(pngdata);
     free(filenameKey);
+    return 0;
 }
 
 
