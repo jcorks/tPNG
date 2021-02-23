@@ -415,9 +415,9 @@ static void tpng_image_init(tpng_image_t * image, uint32_t rawlen) {
 }
 
 
-static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t * expanded) {
+static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t * expanded, int rowPixelWidth) {
     uint32_t i;
-    uint32_t bitCount = image->colorDepth*image->w;
+    uint32_t bitCount = image->colorDepth*rowPixelWidth;
     int iter;
     int palette;
     int rawVal, rawG, rawB;
@@ -503,7 +503,7 @@ static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t *
         iter = 0;
         switch(image->colorDepth) {
           case 8:
-            for(i = 0; i < image->w; ++i, iter+=4) {
+            for(i = 0; i < rowPixelWidth; ++i, iter+=4) {
                 expanded[iter]   = row[i*3  ]; 
                 expanded[iter+1] = row[i*3+1]; 
                 expanded[iter+2] = row[i*3+2]; 
@@ -516,7 +516,7 @@ static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t *
             }
             break;
           case 16:
-            for(i = 0; i < image->w; ++i, iter+=4) {
+            for(i = 0; i < rowPixelWidth; ++i, iter+=4) {
                 rawVal = row[i*6]  *0xff + row[i*6+1];
                 rawG =   row[i*6+2]*0xff + row[i*6+3];
                 rawB =   row[i*6+4]*0xff + row[i*6+5];
@@ -589,7 +589,7 @@ static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t *
       case 4:
         switch(image->colorDepth) {
           case 8:
-            for(i = 0; i < image->w; ++i) {
+            for(i = 0; i < rowPixelWidth; ++i) {
                 expanded[i*4]   = row[i*2]; 
                 expanded[i*4+1] = row[i*2]; 
                 expanded[i*4+2] = row[i*2]; 
@@ -598,7 +598,7 @@ static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t *
             }
 
           case 16:
-            for(i = 0; i < image->w; ++i) {
+            for(i = 0; i < rowPixelWidth; ++i) {
                 expanded[i*4]   = (row[i*4  ]+row[i*4+1])/2; 
                 expanded[i*4+1] = expanded[i*4+0];
                 expanded[i*4+2] = expanded[i*4+1];
@@ -612,7 +612,7 @@ static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t *
       case 6:
         switch(image->colorDepth) {
           case 8:
-            for(i = 0; i < image->w; ++i) {
+            for(i = 0; i < rowPixelWidth; ++i) {
                 expanded[i*4  ] = row[i*4  ]; 
                 expanded[i*4+1] = row[i*4+1]; 
                 expanded[i*4+2] = row[i*4+2]; 
@@ -620,7 +620,7 @@ static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t *
             }
             break;
           case 16:
-            for(i = 0; i < image->w; ++i) {
+            for(i = 0; i < rowPixelWidth; ++i) {
                 expanded[i*4  ] = row[i*8]  ; 
                 expanded[i*4+1] = row[i*8+2]; 
                 expanded[i*4+2] = row[i*8+4]; 
@@ -633,6 +633,63 @@ static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t *
 
       default:;
     }
+}
+
+
+static int tpng_paeth_predictor(int a, int b, int c) {
+    int p = a + b - c;// checked, no overflow
+    int pa = abs(p-a);// checked, no overflow
+    int pb = abs(p-b);// checked, no overflow
+    int pc = abs(p-c);// checked, no overflow
+
+    if      (pa <= pb && pa <= pc) return a;
+    else if (pb <= pc)             return b;
+    else                           return c;
+}
+
+
+static void tpng_unfilter_row(
+    tpng_image_t  * image, 
+    uint8_t       * thisRow,
+    const uint8_t * prevRow,
+    uint32_t        rowBytes,
+    int             Bpp,
+    int             filter
+) {
+    uint32_t i;
+    switch(filter) {
+      case 0: // no filtering 
+        break;
+      case 1: // Sub 
+        for(i = Bpp; i < rowBytes; ++i) {
+            thisRow[i] = thisRow[i] + thisRow[i-Bpp];
+        }
+        break;
+      case 2: // Up
+        for(i = 0; i < rowBytes; ++i) {
+            thisRow[i] = thisRow[i] + prevRow[i];
+        }
+        break;
+
+      case 3: //average
+        for(i = 0; i < Bpp; ++i) {
+            thisRow[i] = thisRow[i] + (int)((0 + prevRow[i])/2.0);
+        }
+        for(i = Bpp; i < rowBytes; ++i) {
+            thisRow[i] = thisRow[i] + (int)((thisRow[i-Bpp] + prevRow[i])/2.0);
+        }
+        break;   
+
+      case 4: //paeth
+        for(i = 0; i < Bpp; ++i) {           
+            thisRow[i] = thisRow[i] + tpng_paeth_predictor(0, prevRow[i], 0);
+        }
+        for(i = Bpp; i < rowBytes; ++i) {
+            thisRow[i] = thisRow[i] + tpng_paeth_predictor(thisRow[i-Bpp], prevRow[i], prevRow[i-Bpp]);
+        }
+        break;
+      default:;
+    }      
 }
 
 static int tpng_get_bytes_per_pixel(tpng_image_t * image) {
@@ -678,16 +735,6 @@ static int tpng_get_bytes_per_row(tpng_image_t * image) {
 }
 
 
-static int tpng_paeth_predictor(int a, int b, int c) {
-    int p = a + b - c;// checked, no overflow
-    int pa = abs(p-a);// checked, no overflow
-    int pb = abs(p-b);// checked, no overflow
-    int pc = abs(p-c);// checked, no overflow
-
-    if      (pa <= pb && pa <= pc) return a;
-    else if (pb <= pc)             return b;
-    else                           return c;
-}
 
 
 
@@ -803,7 +850,6 @@ static void tpng_process_chunk(tpng_image_t * image, tpng_chunk_t * chunk) {
         // Expanded raw row, where each RGBA pixel is given 
         // the raw value within 
         uint8_t * rowExpanded = TPNG_CALLOC(4, image->w);
-        int i;
         for(row = 0; row < image->h; ++row) {
             int filter = TPNG_READ(uint8_t);
             const void * readN = TPNG_READ_N(rowBytes);
@@ -811,43 +857,12 @@ static void tpng_process_chunk(tpng_image_t * image, tpng_chunk_t * chunk) {
             if (!readN) break;
             memcpy(thisRow, readN, rowBytes);
     
-            switch(filter) {
-              case 0: // no filtering 
-                break;
-              case 1: // Sub 
-                for(i = Bpp; i < rowBytes; ++i) {
-                    thisRow[i] = thisRow[i] + thisRow[i-Bpp];
-                }
-                break;
-              case 2: // Up
-                for(i = 0; i < rowBytes; ++i) {
-                    thisRow[i] = thisRow[i] + prevRow[i];
-                }
-                break;
-
-              case 3: //average
-                for(i = 0; i < Bpp; ++i) {
-                    thisRow[i] = thisRow[i] + (int)((0 + prevRow[i])/2.0);
-                }
-                for(i = Bpp; i < rowBytes; ++i) {
-                    thisRow[i] = thisRow[i] + (int)((thisRow[i-Bpp] + prevRow[i])/2.0);
-                }
-                break;   
-
-              case 4: //paeth
-                for(i = 0; i < Bpp; ++i) {           
-                    thisRow[i] = thisRow[i] + tpng_paeth_predictor(0, prevRow[i], 0);
-                }
-                for(i = Bpp; i < rowBytes; ++i) {
-                    thisRow[i] = thisRow[i] + tpng_paeth_predictor(thisRow[i-Bpp], prevRow[i], prevRow[i-Bpp]);
-                }
-                break;
-              default:;
-            }            
-            
+      
+            // remove the filter from the bytes in the row 
+            tpng_unfilter_row(image, thisRow, prevRow, rowBytes, Bpp, filter);
 
             // finally: get scanlines from data
-            tpng_expand_row(image, thisRow, rowExpanded);
+            tpng_expand_row(image, thisRow, rowExpanded, image->w);
             
             memcpy(
                 image->rgba + row*image->w*4, 

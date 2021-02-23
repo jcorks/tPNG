@@ -175,6 +175,7 @@ static int verify_test(const char * filenamePNG) {
 
 
 int main() {
+    //verify_test("interlace.png");
     verify_test("gray-1.png");
     verify_test("gray-1-1.8.png");
     verify_test("gray-1-1.8-tRNS.png");
