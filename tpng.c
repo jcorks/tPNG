@@ -710,7 +710,7 @@ static int tpng_get_bytes_per_pixel(tpng_image_t * image) {
     return bpp < 8 ? 1 : bpp/8;
 }   
 
-static int tpng_get_bytes_per_row(tpng_image_t * image) {
+static int tpng_get_bytes_per_row(tpng_image_t * image, int width) {
     int bpp = image->colorDepth;
 
     // R G B per pixel
@@ -724,7 +724,7 @@ static int tpng_get_bytes_per_row(tpng_image_t * image) {
         bpp += image->colorDepth;
     }
 
-    bpp *= image->w;
+    bpp *= width;
 
     if (bpp < 8) return 1;
     if (bpp % 8) {
@@ -735,6 +735,227 @@ static int tpng_get_bytes_per_row(tpng_image_t * image) {
 }
 
 
+//TODO: adam7 needs to serious efficiency updates!
+// its mostly written rn for readability.
+
+// bytes within the 8x8 adam7 grid
+// that each pass makes
+static uint8_t TPNG_ADAM7__PASS_1_BYTES[] = {0};
+static uint8_t TPNG_ADAM7__PASS_2_BYTES[] = {4};
+static uint8_t TPNG_ADAM7__PASS_3_BYTES[] = {32, 36}; // Pass3
+static uint8_t TPNG_ADAM7__PASS_4_BYTES[] = {
+    2, 6,
+    34, 38
+};
+    
+static uint8_t TPNG_ADAM7__PASS_5_BYTES[] = {
+    16, 18, 20, 22,
+    48, 50, 52, 54        
+};
+
+
+static uint8_t TPNG_ADAM7__PASS_6_BYTES[] = {
+    1,  3,  5,  7,
+    17, 19, 21, 23,
+    33, 35, 37, 39,
+    49, 51, 53, 55
+};
+
+static uint8_t TPNG_ADAM7__PASS_7_BYTES[] = {
+    8,  9,  10, 11, 12, 13, 14, 15,
+    24, 25, 26, 27, 28, 29, 30, 31,
+    40, 41, 42, 43, 44, 45, 46, 47,
+    56, 57, 58, 59, 60, 61, 62, 63        
+};
+
+static uint8_t * TPNG_ADAM7__PASS_BYTES[] = {
+    TPNG_ADAM7__PASS_1_BYTES,
+    TPNG_ADAM7__PASS_2_BYTES,
+    TPNG_ADAM7__PASS_3_BYTES,    
+    TPNG_ADAM7__PASS_4_BYTES,
+    TPNG_ADAM7__PASS_5_BYTES,
+    TPNG_ADAM7__PASS_6_BYTES,
+    TPNG_ADAM7__PASS_7_BYTES
+};
+
+
+
+// width, height of each pass subimage
+static uint8_t TPNG_ADAM7__PASS_DIMS[][2] = {
+    {1, 1}, // pass 1
+    {1, 1}, // pass 2,
+    {2, 1}, // pass 3,
+    {2, 2}, // pass 4,
+    {4, 2}, // pass 5,
+    {4, 4}, // pass 6,
+    {8, 4}, // pass 7
+};
+
+
+// given a pixel in a pass subimage, returns the index 
+// in the image RGBA buffer.
+static int tpng_adam7_subpixel_to_pixel(
+    tpng_image_t * image,
+    // x and y in the SUBIMAGE, which is a concatenation of adam7 boxes
+    // for a specific pass.
+    int subx,
+    int suby,
+    int pass // z
+) {
+    // x / y in adam7 box space
+    int x8 = subx%TPNG_ADAM7__PASS_DIMS[pass][0];
+    int y8 = suby%TPNG_ADAM7__PASS_DIMS[pass][1];
+
+    const uint8_t * passBytes = TPNG_ADAM7__PASS_BYTES[pass];   
+
+    // actual adam7 box row
+    const uint8_t * passRow = passBytes+TPNG_ADAM7__PASS_DIMS[pass][0]*y8;
+    
+    // byte reference within the adam7 box
+    int adamByte = passRow[x8];
+
+
+    // offset from row start in full image rgba
+    int x = adamByte%8   + 8*(subx/TPNG_ADAM7__PASS_DIMS[pass][0]);
+    int y = (adamByte/8) + 8*(suby/TPNG_ADAM7__PASS_DIMS[pass][1]);
+    
+    //printf("Pass%d: (%d, %d) -> (%d, %d) @%d\n", pass, subx, suby, x, y, adamByte);
+    return x + y*image->w;
+}
+
+static void tpng_adam7_pass_row_to_image(
+    const uint8_t * passRgbaRow,
+    tpng_image_t * image,
+    int subrow,
+    int rowWidth,
+    int pass
+) {
+    uint32_t i;
+    int pixel;
+    for(i = 0; i < rowWidth; ++i) {
+        pixel = tpng_adam7_subpixel_to_pixel(image, i, subrow, pass);
+        // should be fine; theyre aligned to 32bit boundaries.
+        (*(uint32_t*)(image->rgba+(pixel*4))) = (*(uint32_t*)(passRgbaRow+(i*4))); 
+    }
+    
+}
+
+// gets how many pixels fit from an adam7 pass width-wise
+static int tpng_adam7_get_pass_width(tpng_image_t * image, int pass) {
+    int width = 0; 
+    int i, n;
+    int subimgW = TPNG_ADAM7__PASS_DIMS[pass][0];
+    const uint8_t * iter = TPNG_ADAM7__PASS_BYTES[pass];
+    for(i = 0; i < image->w; i+=8) {    
+        for(n = 0; n < subimgW; ++n) {
+            if (i+(iter[n]%8) < image->w)
+                width++;
+            else 
+                return width;
+        }
+    }
+    return width;
+}
+
+static int tpng_adam7_get_pass_height(tpng_image_t * image, int pass) {
+    int height = 0; 
+    int i, n;
+    int subimgH = TPNG_ADAM7__PASS_DIMS[pass][1];
+    int subimgW = TPNG_ADAM7__PASS_DIMS[pass][0];
+    const uint8_t * iter = TPNG_ADAM7__PASS_BYTES[pass];
+    for(i = 0; i < image->h; i+=8) {    
+        for(n = 0; n < subimgH; ++n) {
+            if (i+(iter[n*subimgW]/8) < image->h)
+                height++;
+            else 
+                return height;
+        }
+    }
+    return height;
+}
+
+
+
+
+static void tpng_adam7_decode(
+    tpng_image_t * image, 
+    tpng_iter_t * iter,
+    int Bpp  
+) {
+    TPNG_BEGIN(iter);
+    uint32_t rowBytes = tpng_get_bytes_per_row(image, image->w);
+
+    // row bytes of the above row, filter byte discarded
+    // Before initialized, is 0.
+    uint8_t * prevRow = TPNG_CALLOC(1, rowBytes);
+    // row bytes of the current row, filter byte discarded
+    uint8_t * thisRow = TPNG_CALLOC(1, rowBytes);
+
+    // Expanded raw row, where each RGBA pixel is given 
+    // the raw value within 
+    uint8_t * rowExpanded = TPNG_CALLOC(4, image->w);
+
+
+
+    // each pass is an independent subimage that correspond 
+    // to pixels within the final image, separated in 8x8 
+    // chunks.
+    int pass;
+
+    // the width and height for the pass.
+    int passWidth;
+    int passHeight;
+    int passRowBytes;
+    int row;
+
+    
+
+
+    for(pass = 0; pass < 7; ++pass) {
+        memset(prevRow, 0, rowBytes);
+        
+        // first, we need how many rows / bytes consist of this row.
+        passWidth  = tpng_adam7_get_pass_width(image, pass);
+        passHeight = tpng_adam7_get_pass_height(image, pass);
+        
+        if (passWidth == 0) continue;
+        passRowBytes  = tpng_get_bytes_per_row(image, passWidth);
+        
+        for(row = 0; row < passHeight; ++row) {
+            int filter = TPNG_READ(uint8_t);
+            const void * readN = TPNG_READ_N(passRowBytes);
+            // abort read of IDAT
+            if (!readN) break;
+            memcpy(thisRow, readN, passRowBytes);
+    
+      
+            // remove the filter from the bytes in the row 
+            tpng_unfilter_row(image, thisRow, prevRow, passRowBytes, Bpp, filter);
+
+            // finally: get scanlines from data
+            tpng_expand_row(image, thisRow, rowExpanded, image->w);
+
+
+            tpng_adam7_pass_row_to_image(
+                rowExpanded,
+                image,
+                row, // row within the complete pass image
+                passWidth,
+                pass
+            );
+            
+            
+            // save raw previous scanline            
+            memcpy(prevRow, thisRow, rowBytes);
+        }
+    }
+
+    
+    free(prevRow);
+    free(thisRow);
+    free(rowExpanded);
+    
+}
 
 
 
@@ -833,52 +1054,57 @@ static void tpng_process_chunk(tpng_image_t * image, tpng_chunk_t * chunk) {
         TPNG_BEGIN(iter);        
 
         
-
+        
         // next: filter
         // each scanline contains a single byte specifying how its filtered (reordered)
         uint32_t row = 0;
         int Bpp = tpng_get_bytes_per_pixel(image);
-        uint32_t rowBytes = tpng_get_bytes_per_row(image);
+        
+        if (image->interlaceMethod == 0) {
+            uint32_t rowBytes = tpng_get_bytes_per_row(image, image->w);
 
-        // row bytes of the above row, filter byte discarded
-        // Before initialized, is 0.
-        uint8_t * prevRow = TPNG_CALLOC(1, rowBytes);
-        // row bytes of the current row, filter byte discarded
-        uint8_t * thisRow = TPNG_CALLOC(1, rowBytes);
+            // row bytes of the above row, filter byte discarded
+            // Before initialized, is 0.
+            uint8_t * prevRow = TPNG_CALLOC(1, rowBytes);
+            // row bytes of the current row, filter byte discarded
+            uint8_t * thisRow = TPNG_CALLOC(1, rowBytes);
 
 
-        // Expanded raw row, where each RGBA pixel is given 
-        // the raw value within 
-        uint8_t * rowExpanded = TPNG_CALLOC(4, image->w);
-        for(row = 0; row < image->h; ++row) {
-            int filter = TPNG_READ(uint8_t);
-            const void * readN = TPNG_READ_N(rowBytes);
-            // abort read of IDAT
-            if (!readN) break;
-            memcpy(thisRow, readN, rowBytes);
-    
-      
-            // remove the filter from the bytes in the row 
-            tpng_unfilter_row(image, thisRow, prevRow, rowBytes, Bpp, filter);
+            // Expanded raw row, where each RGBA pixel is given 
+            // the raw value within 
+            uint8_t * rowExpanded = TPNG_CALLOC(4, image->w);
+            for(row = 0; row < image->h; ++row) {
+                int filter = TPNG_READ(uint8_t);
+                const void * readN = TPNG_READ_N(rowBytes);
+                // abort read of IDAT
+                if (!readN) break;
+                memcpy(thisRow, readN, rowBytes);
+        
+          
+                // remove the filter from the bytes in the row 
+                tpng_unfilter_row(image, thisRow, prevRow, rowBytes, Bpp, filter);
 
-            // finally: get scanlines from data
-            tpng_expand_row(image, thisRow, rowExpanded, image->w);
-            
-            memcpy(
-                image->rgba + row*image->w*4, 
-                rowExpanded,
-                4 * (image->w)
-            );
+                // finally: get scanlines from data
+                tpng_expand_row(image, thisRow, rowExpanded, image->w);
                 
-            // save raw previous scanline            
-            memcpy(prevRow, thisRow, rowBytes);
-        }
-            
+                memcpy(
+                    image->rgba + row*image->w*4, 
+                    rowExpanded,
+                    4 * (image->w)
+                );
+                    
+                // save raw previous scanline            
+                memcpy(prevRow, thisRow, rowBytes);
+            }
+            TPNG_FREE(thisRow);
+            TPNG_FREE(prevRow);
+            TPNG_FREE(rowExpanded);
+            TPNG_FREE(rawUncomp);
+            // adam7..
+        } else if (image->interlaceMethod == 1) {
+            tpng_adam7_decode(image, iter, Bpp);        
+        }            
         tpng_iter_destroy(iter);        
-        TPNG_FREE(thisRow);
-        TPNG_FREE(prevRow);
-        TPNG_FREE(rowExpanded);
-        TPNG_FREE(rawUncomp);
     }
 }
 

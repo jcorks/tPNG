@@ -175,7 +175,7 @@ static int verify_test(const char * filenamePNG) {
 
 
 int main() {
-    //verify_test("interlace.png");
+
     verify_test("gray-1.png");
     verify_test("gray-1-1.8.png");
     verify_test("gray-1-1.8-tRNS.png");
@@ -308,6 +308,11 @@ int main() {
     verify_test("average-a.png");
     verify_test("average-b.png");
     verify_test("important.png");
+    
+    verify_test("interlace-small.png");
+    verify_test("interlace.png");
+    verify_test("interlace-medium.png");
+
     
     printf("The test is complete.\n");
     return 0;
