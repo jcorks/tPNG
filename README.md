@@ -31,7 +31,7 @@ Why use tPNG?
 * No external dependencies.
 * Easy to use, easy to drop in a project
 * No need for a separate shared library
-* Very little executable overhead (<2000 lines of C code)
+* Very little executable overhead (~2000 lines of C code)
 * Written in portable C
 
 
