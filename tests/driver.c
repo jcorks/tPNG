@@ -176,6 +176,7 @@ static int verify_test(const char * filenamePNG) {
 
 int main() {
 
+
     verify_test("gray-1.png");
     verify_test("gray-1-1.8.png");
     verify_test("gray-1-1.8-tRNS.png");
@@ -278,6 +279,21 @@ int main() {
     verify_test("rgb-filter3.png");
     verify_test("rgb-filter4.png");
 
+    verify_test("interlace-8-grayscale-alpha.png");
+    verify_test("interlace-1-palette.png");
+    verify_test("interlace-2-grayscale.png");
+    verify_test("interlace-2-palette.png");
+    verify_test("interlace-4-grayscale.png");
+    verify_test("interlace-4-palette.png");
+    verify_test("interlace-8-grayscale.png");
+    verify_test("interlace-8-palette.png");
+    verify_test("interlace-8-rgb.png");
+    verify_test("interlace-8-rgba.png");
+    verify_test("interlace-16-grayscale.png");
+    verify_test("interlace-16-grayscale-alpha.png");
+    verify_test("interlace-16-rgb.png");
+    verify_test("interlace-16-rgba.png");
+    verify_test("interlace-bw.png");
 
 
 

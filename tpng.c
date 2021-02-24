@@ -596,13 +596,13 @@ static void tpng_expand_row(tpng_image_t * image, const uint8_t * row, uint8_t *
                 expanded[i*4+3] = row[i*2+1]; 
 
             }
-
+            break;
           case 16:
             for(i = 0; i < rowPixelWidth; ++i) {
-                expanded[i*4]   = (row[i*4  ]+row[i*4+1])/2; 
+                expanded[i*4]   = row[i*4]; 
                 expanded[i*4+1] = expanded[i*4+0];
                 expanded[i*4+2] = expanded[i*4+1];
-                expanded[i*4+3] = (row[i*4+2]+row[i*4+3])/2; 
+                expanded[i*4+3] = row[i*4+2]; 
             }
             break;
         }
@@ -933,7 +933,7 @@ static void tpng_adam7_decode(
             tpng_unfilter_row(image, thisRow, prevRow, passRowBytes, Bpp, filter);
 
             // finally: get scanlines from data
-            tpng_expand_row(image, thisRow, rowExpanded, image->w);
+            tpng_expand_row(image, thisRow, rowExpanded, passWidth);
 
 
             tpng_adam7_pass_row_to_image(
@@ -951,9 +951,9 @@ static void tpng_adam7_decode(
     }
 
     
-    free(prevRow);
-    free(thisRow);
-    free(rowExpanded);
+    TPNG_FREE(prevRow);
+    TPNG_FREE(thisRow);
+    TPNG_FREE(rowExpanded);
     
 }
 
@@ -1099,12 +1099,12 @@ static void tpng_process_chunk(tpng_image_t * image, tpng_chunk_t * chunk) {
             TPNG_FREE(thisRow);
             TPNG_FREE(prevRow);
             TPNG_FREE(rowExpanded);
-            TPNG_FREE(rawUncomp);
             // adam7..
         } else if (image->interlaceMethod == 1) {
             tpng_adam7_decode(image, iter, Bpp);        
         }            
         tpng_iter_destroy(iter);        
+        TPNG_FREE(rawUncomp);
     }
 }
 
@@ -1191,7 +1191,7 @@ const void * tpng_iter_advance_guaranteed(tpng_iter_t * t, uint32_t size) {
         void * newErrorArray = TPNG_MALLOC(sizeof(void*)*(t->nerrors+1));
         if (t->nerrors) {
             memcpy(newErrorArray, t->errors, sizeof(void*)*t->nerrors);
-            free(t->errors);
+            TPNG_FREE(t->errors);
         }
         t->errors = newErrorArray;
         t->errors[t->nerrors] = newError;
