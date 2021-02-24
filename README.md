@@ -1,6 +1,6 @@
 # tPNG      
 
-[![Build Status](https://travis-ci.com/jcorks/tPNG.svg?branch=main)](https://travis-ci.com/jcorks/tPNG)
+[![Build Status](https://travis-ci.com/jcorks/tPNG.svg?branch=main)](https://travis-ci.com/jcorks/tPNG) [![codecov](https://codecov.io/gh/jcorks/tPNG/branch/main/graph/badge.svg?token=KUSJPZYJZT)](https://codecov.io/gh/jcorks/tPNG)
 
 
 A portable C99 file and header that dumps PNG files to raw RGBA pixels with no dependencies.
