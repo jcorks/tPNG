@@ -25,9 +25,9 @@ jobs:
 
     - os: windows
       compiler: gcc
-      script: gcc tpng.c -Wall -O2 tests\driver.c -o tests\tpng_test.exe
+      script: gcc tpng.c -Wall -O2 tests\\driver.c -o tests\\tpng_test.exe
 
     - os: windows
       compiler: clang
-      script: clang tpng.c -Wall -O2 tests\driver.c -o tests\tpng_test.exe
+      script: clang tpng.c -Wall -O2 tests\\driver.c -o tests\\tpng_test.exe
 
