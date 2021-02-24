@@ -1,9 +1,16 @@
 language: c
-os:
-  - osx
-  - linux
-  - windows
-compiler:
-  - gcc 
-  - clang
-script: make
+
+jobs:
+  include:
+    - os: linux
+      compiler: gcc clang
+      script: make 
+
+    - os: osx
+      compiler: gcc clang
+      script: make 
+
+
+    - os: windows
+      compiler: gcc clang
+      script: make.bat
