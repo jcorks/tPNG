@@ -4,6 +4,6 @@ os:
   - linux
   - windows
 compiler:
-  - gcc
+  - gcc 
   - clang
 script: make
