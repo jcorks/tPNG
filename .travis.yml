@@ -3,14 +3,18 @@ language: c
 jobs:
   include:
     - os: linux
-      compiler: gcc clang
+      compiler: gcc
       script: make 
+
+    - os: linux
+      compiler: clang
+      script: make 
+
 
     - os: osx
-      compiler: gcc clang
+      compiler: gcc
       script: make 
 
-
     - os: windows
-      compiler: gcc clang
+      compiler: gcc
       script: make.bat
