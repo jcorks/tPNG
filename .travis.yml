@@ -4,21 +4,24 @@ jobs:
   include:
     - os: linux
       compiler: gcc
-      script: make 
+      script: sh ./ci_build.sh
+      after_success:
+        - bash <(curl -s https://codecov.io/bash)
+
 
     - os: linux
       compiler: clang
-      script: make 
+      script: make
 
 
 
     - os: osx
       compiler: gcc
-      script: make 
+      script: make
 
     - os: osx
       compiler: clang
-      script: make 
+      script: make
 
 
 
