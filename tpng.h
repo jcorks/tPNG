@@ -1,7 +1,7 @@
 /**************************************************************************
  *
  * tPNG:
- * tPNG is part of the topaz project. 
+ * tPNG is part of the topaz project. (https://github.com/jcorks/topaz)
  * 2021, Johnathan Corkery
  *
  *
