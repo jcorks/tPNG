@@ -7,4 +7,6 @@ make
 cd ./tests/
 ./tpng_test
 cd ..
-gcov tpng.c
+if [ "$1" = "--gcov" ]; then 
+    gcov tpng.c
+fi

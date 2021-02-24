@@ -4,7 +4,7 @@ jobs:
   include:
     - os: linux
       compiler: gcc
-      script: sh ./ci_build.sh
+      script: sh ./ci_build.sh --gcov
       after_success:
         - bash <(curl -s https://codecov.io/bash)
 
@@ -13,16 +13,15 @@ jobs:
       compiler: clang
       script: sh ./ci_build.sh
 
-    - os: linux
+      
+    - arch: arm64
+      os: linux
       compiler: gcc
-      arch: 
-        - arm64
-        - ppc64le
       script: sh ./ci_build.sh
+
 
     - os: linux
       compiler: gcc
-      architecture: 
       script: sh ./ci_build.sh
 
     - os: osx
