@@ -11,7 +11,7 @@ jobs:
       script: make 
 
 
-      
+
     - os: osx
       compiler: gcc
       script: make 
@@ -25,9 +25,9 @@ jobs:
 
     - os: windows
       compiler: gcc
-      script: make_gcc.bat
+      script: gcc tpng.c -Wall -O2 tests\driver.c -o tests\tpng_test.exe
 
     - os: windows
       compiler: clang
-      script: make_clang.bat
+      script: clang tpng.c -Wall -O2 tests\driver.c -o tests\tpng_test.exe
 
