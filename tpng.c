@@ -60,15 +60,32 @@ extern "C" {
 
 
 
-
-
-
-
+///////////////// 
+///////////////// All includes.
 
 #include "tpng.h"
+
+// Needed for tPNG
 #include <string.h>
 #include <stdlib.h>
-#include <assert.h>
+//
+
+
+// Needed for TINFL
+#include <stddef.h>
+//#include <stdint.h>
+//#include <stdlib.h>
+//#include <string.h>
+//
+
+
+/////////////////
+/////////////////
+
+
+
+
+
 
 
 //
@@ -1358,11 +1375,7 @@ struct tinfl_decompressor_tag
 
 
 
-#include <stddef.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
+
 // topaz addition: import of macros from miniz
 #define TINFL_MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define TINFL_MAX(a, b) (((a) > (b)) ? (a) : (b))
@@ -1917,7 +1930,7 @@ tinfl_status tinfl_decompress(tinfl_decompressor *r, const uint8_t *pIn_buf_next
         num_bits -= 8;
     }
     bit_buf &= (tinfl_bit_buf_t)((((uint64_t)1) << num_bits) - (uint64_t)1);
-    assert(!num_bits); /* if this assert fires then we've read beyond the end of non-deflate/zlib streams with following data (such as gzip streams). */
+    //assert(!num_bits); /* if this assert fires then we've read beyond the end of non-deflate/zlib streams with following data (such as gzip streams). */
 
     if (decomp_flags & TINFL_FLAG_PARSE_ZLIB_HEADER)
     {
