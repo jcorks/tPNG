@@ -1,4 +1,8 @@
-# tPNG
+# tPNG      
+
+[![Build Status](https://travis-ci.com/jcorks/tPNG.svg?branch=main)](https://travis-ci.com/jcorks/tPNG)
+
+
 A portable C99 file and header that dumps PNG files to raw RGBA pixels with no dependencies.
 The interface consists of one function.
 
