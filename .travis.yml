@@ -11,10 +11,23 @@ jobs:
       script: make 
 
 
+      
     - os: osx
       compiler: gcc
       script: make 
 
+    - os: osx
+      compiler: clang
+      script: make 
+
+
+
+
     - os: windows
       compiler: gcc
-      script: make.bat
+      script: make_gcc.bat
+
+    - os: windows
+      compiler: clang
+      script: make_clang.bat
+
