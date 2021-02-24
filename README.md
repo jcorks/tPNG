@@ -9,9 +9,14 @@ The interface consists of one function.
 
 What is it?
 -----------
-_tPNG has one goal: to retrieve raw pixels for immediate use without hassle._
+_tPNG has one goal: to retrieve raw pixels for immediate use from a PNG file without hassle._
+
+
+
+
 The header contains one definition for one function, which returns a heap copy of 
 32bit RGBA-encoded pixels, a common format for graphics-oriented software.
+
 tPNG is a good choice if you want to get started quickly with using 
 PNG files without dealing with the configuration, compilation, and 
 management of libpng or other image loaders.
@@ -27,7 +32,7 @@ Why use tPNG?
 ------------
 * No external dependencies.
 * Easy to use, easy to drop in a project.
-* No need for a separate shared library.
+* No need for a separate shared libraries of any kind.
 * Very little executable overhead (~2000 lines of C code).
 * Thread-safe.
 * Written in portable, plain C99 (mostly for the sized ints!).
